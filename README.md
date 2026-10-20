@@ -22,6 +22,7 @@ A citizen can ask a question in Hindi about a document written in English (or vi
 ## Features
 
 - **Multi-format ingestion** — PDF, Microsoft Word (`.docx`), and plain text (`.txt`)
+- **OCR for scanned PDFs** — uses native PDF text extraction where available and Tesseract OCR for pages with no or very little selectable text
 - **Multilingual embeddings** — documents and queries in different languages (English, Hindi, Tamil, Bengali, etc.) share one semantic vector space
 - **Cross-lingual semantic retrieval** — relevant content is retrieved regardless of the language it was written in
 - **Query language detection** — the citizen's question language is detected and used to control the response language
@@ -35,6 +36,8 @@ A citizen can ask a question in Hindi about a document written in English (or vi
 Government Documents
         ↓
 Document Loading (PDF / DOCX / TXT)
+        ↓
+PDF: Native Text Extraction → OCR fallback for scanned pages
         ↓
 Text Extraction
         ↓
@@ -89,7 +92,8 @@ Government-RAG/
 │
 ├── app.py                  # Flask entry point, coordinates GUI ↔ RAG pipeline
 │
-├── pdf_loader.py            # PDF text + page extraction
+├── pdf_loader.py            # PDF text extraction + OCR fallback
+├── ocr_processor.py         # Tesseract OCR helper
 ├── docx_loader.py           # Word document text extraction
 ├── txt_loader.py            # Plain text loading
 ├── cleaner.py                # Text cleaning
@@ -206,7 +210,6 @@ It's important not to conflate these:
 - Document/page metadata and source traceability
 
 **Excluded (candidates for future work):**
-- OCR (scanned documents)
 - Citizen document uploads
 - Voice input/output (ASR/TTS)
 - Advanced Bhashini integration
@@ -225,7 +228,7 @@ It's important not to conflate these:
 
 ## Recommended Implementation Order
 
-1. Document loading (`pdf_loader.py`, `docx_loader.py`, `txt_loader.py`)
+1. Document loading (`pdf_loader.py`, `ocr_processor.py`, `docx_loader.py`, `txt_loader.py`)
 2. Text processing (`cleaner.py`, `chunker.py`)
 3. Multilingual embedding (`embedding_model.py`) — verify cross-language similarity
 4. Vector database (`vector_store.py`) — Admin pipeline complete at this point
@@ -246,3 +249,25 @@ The GUI and Flask layers are intentionally kept minimal. This is not a web-devel
 - Retrieval-Augmented Generation
 - Grounded LLM generation
 - Source traceability
+
+
+## OCR Setup (Windows)
+
+The Python packages are installed from `requirements.txt`, but `pytesseract` also
+requires the separate Tesseract OCR application.
+
+1. Install the Tesseract OCR Windows application.
+2. Ensure `tesseract.exe` is on your system `PATH` (or configure
+   `pytesseract.pytesseract.tesseract_cmd` in `pdf_loader.py` with its installed path).
+3. Open a new PowerShell terminal and verify that `tesseract --version` works.
+4. Install project dependencies with `pip install -r requirements.txt`.
+5. Run the app normally with `python app.py`.
+
+The loader checks every PDF page. Pages with enough selectable text use normal
+PDF extraction; pages with little or no selectable text are rendered and passed
+through OCR. OCR is local and does not require a Gemini API key. English OCR is
+the default; additional Tesseract language data is needed for other document
+languages.
+
+If a document produces no usable text, processing now returns an error instead
+of silently reporting success with zero chunks.
